@@ -28,8 +28,8 @@ Then, once per cluster:
 - `demo` namespace: nginx demo (first-deploy smoke test)
 - ingress-nginx + cert-manager (Let's Encrypt prod)
 
-Retired: the old `ai-demo/ai-app` deployment and the hand-applied
-`ai-platform/llm-api` stack — absorbed into AskVault + Ollama above.
+Retired 2026-09-23: the old `ai-demo/ai-app` deployment and the hand-applied
+`ai-platform/llm-api` stack were deleted, absorbed into AskVault + Ollama above.
 
 ## Useful
 
