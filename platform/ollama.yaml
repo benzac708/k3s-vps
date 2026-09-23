@@ -48,6 +48,9 @@ spec:
         ports:
         - containerPort: 11434
         env:
+        # Keep models warm: cold loads on CPU cost minutes, warm answers tens of seconds.
+        - name: OLLAMA_KEEP_ALIVE
+          value: 1h
         - name: OLLAMA_HOST
           value: 0.0.0.0:11434
         volumeMounts:
