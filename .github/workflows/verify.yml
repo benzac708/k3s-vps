@@ -15,9 +15,9 @@ jobs:
       - name: YAML lint
         run: |
           pip install -q yamllint
-          yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}' ingress/ tls/ platform/
+          yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable, indentation: {spaces: 2, indent-sequences: false}}}' ingress/ tls/ platform/
       - name: No placeholders left behind
-        run: "! grep -rn REPLACE_ME ingress/ tls/ platform/ README.md install.sh 2>/dev/null"
+        run: "! grep -rnE "REPLACE_(ME|WITH)" ingress/ tls/ platform/ README.md install.sh 2>/dev/null"
       - name: No secrets in tree
         uses: gitleaks/gitleaks-action@v2
       - name: Install kubeconform
