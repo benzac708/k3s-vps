@@ -1,0 +1,57 @@
+# Ollama, shared platform piece. AskVault and anything else on this box
+# talk to it at http://ollama.ai-platform:11434 (OpenAI-compatible /v1).
+# Models are pulled once, by hand, after first deploy:
+#   kubectl -n ai-platform exec deploy/ollama -- ollama pull llama3.2:3b
+#   kubectl -n ai-platform exec deploy/ollama -- ollama pull nomic-embed-text
+# Pinned image (see bootstrap.sh for the version policy: pinned, dated).
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: ai-platform
+spec:
+  selector: {app: ollama}
+  ports:
+  - port: 11434
+    targetPort: 11434
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-data
+  namespace: ai-platform
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: {storage: 10Gi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: ai-platform
+  labels: {app: ollama}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: ollama}
+  template:
+    metadata:
+      labels: {app: ollama}
+    spec:
+      containers:
+      - name: ollama
+        image: ollama/ollama:0.34.3
+        ports:
+        - containerPort: 11434
+        env:
+        - name: OLLAMA_HOST
+          value: 0.0.0.0:11434
+        volumeMounts:
+        - {name: data, mountPath: /root/.ollama}
+        resources:
+          requests: {cpu: "500m", memory: "1Gi"}
+          limits: {cpu: "4000m", memory: "6Gi"}
+      volumes:
+      - name: data
+        persistentVolumeClaim: {claimName: ollama-data}
