@@ -18,7 +18,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: ollama-data
+  name: ollama-models
   namespace: ai-platform
 spec:
   accessModes: [ReadWriteOnce]
@@ -48,10 +48,10 @@ spec:
         - name: OLLAMA_HOST
           value: 0.0.0.0:11434
         volumeMounts:
-        - {name: data, mountPath: /root/.ollama}
+        - {name: models, mountPath: /root/.ollama}
         resources:
           requests: {cpu: "500m", memory: "1Gi"}
           limits: {cpu: "4000m", memory: "6Gi"}
       volumes:
-      - name: data
-        persistentVolumeClaim: {claimName: ollama-data}
+      - name: models
+        persistentVolumeClaim: {claimName: ollama-models}
