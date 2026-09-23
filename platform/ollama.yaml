@@ -32,6 +32,9 @@ metadata:
   namespace: ai-platform
   labels: {app: ollama}
 spec:
+  # Recreate, not rolling: the models PVC is ReadWriteOnce (two pods can
+  # never mount it at once), and the ns quota has no headroom for surge.
+  strategy: {type: Recreate}
   replicas: 1
   selector:
     matchLabels: {app: ollama}
