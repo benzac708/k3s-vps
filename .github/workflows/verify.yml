@@ -1,0 +1,27 @@
+name: verify
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell scripts pass shellcheck
+        run: shellcheck -S warning install.sh platform/bootstrap.sh
+      - name: Scripts are executable
+        run: test -x install.sh && test -x platform/bootstrap.sh
+      - name: YAML lint
+        run: pip install -q yamllint && yamllint -d "{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}" ingress/ tls/ platform/
+      - name: No placeholders left behind
+        run: "! grep -rn REPLACE_ME ingress/ tls/ platform/ README.md install.sh 2>/dev/null"
+      - name: No secrets in tree
+        uses: gitleaks/gitleaks-action@v2
+      - name: Manifests conform to Kubernetes schemas
+        uses: instrumenta/kubeconform-action@v1.0.4
+        with:
+          filenames: platform/ollama.yaml, platform/ollama-access.yaml, ingress/demo-ingress.yaml, tls/cluster-issuer.yaml
+          kubernetes_version: 1.36.0
+          strict: true
+          ignore_missing_schemas: false
