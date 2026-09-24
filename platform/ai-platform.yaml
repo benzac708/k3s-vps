@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-platform
+  labels:
+    app.kubernetes.io/part-of: askvault
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: ai-platform-quota
+  namespace: ai-platform
+spec:
+  hard:
+    requests.cpu: 500m
+    requests.memory: 1Gi
+    limits.cpu: "4"
+    limits.memory: 10Gi

@@ -1,63 +1,91 @@
-# Ollama, shared platform piece. AskVault and anything else on this box
-# talk to it at http://ollama.ai-platform:11434 (OpenAI-compatible /v1).
-# Models are pulled once, by hand, after first deploy:
-#   kubectl -n ai-platform exec deploy/ollama -- ollama pull llama3.2:3b
-#   kubectl -n ai-platform exec deploy/ollama -- ollama pull nomic-embed-text
-# Pinned image (see bootstrap.sh for the version policy: pinned, dated).
+# Ollama shared platform piece. The image digest is pinned; update it with a
+# reviewed commit and Dependabot/manual verification, never an implicit latest.
 apiVersion: v1
 kind: Service
 metadata:
   name: ollama
   namespace: ai-platform
+  labels:
+    app.kubernetes.io/part-of: askvault
 spec:
-  selector: {app: ollama}
+  selector:
+    app: ollama
   ports:
-  - port: 11434
-    targetPort: 11434
+    - {name: http, port: 11434, targetPort: http, protocol: TCP}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: ollama-models
   namespace: ai-platform
+  labels:
+    app.kubernetes.io/part-of: askvault
 spec:
   accessModes: [ReadWriteOnce]
   resources:
-    requests: {storage: 10Gi}
+    requests:
+      storage: 10Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ollama
   namespace: ai-platform
-  labels: {app: ollama}
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/part-of: askvault
 spec:
-  # Recreate, not rolling: the models PVC is ReadWriteOnce (two pods can
-  # never mount it at once), and the ns quota has no headroom for surge.
   strategy: {type: Recreate}
   replicas: 1
   selector:
-    matchLabels: {app: ollama}
+    matchLabels:
+      app: ollama
   template:
     metadata:
-      labels: {app: ollama}
+      labels:
+        app: ollama
+        app.kubernetes.io/name: ollama
+        app.kubernetes.io/part-of: askvault
     spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
-      - name: ollama
-        image: ollama/ollama:0.34.3
-        ports:
-        - containerPort: 11434
-        env:
-        # Keep models warm: cold loads on CPU cost minutes, warm answers tens of seconds.
-        - name: OLLAMA_KEEP_ALIVE
-          value: 1h
-        - name: OLLAMA_HOST
-          value: 0.0.0.0:11434
-        volumeMounts:
-        - {name: models, mountPath: /root/.ollama}
-        resources:
-          requests: {cpu: "500m", memory: "1Gi"}
-          limits: {cpu: "3", memory: "6Gi"}  # ns quota: 4cpu/10Gi shared with llm-api
+        - name: ollama
+          image: ollama/ollama@sha256:7ab595e4ead391f6818c7215297781282babe0701f6d9a9f8862ac591360a58b
+          ports:
+            - {name: http, containerPort: 11434, protocol: TCP}
+          env:
+            - {name: OLLAMA_KEEP_ALIVE, value: 1h}
+            - {name: OLLAMA_HOST, value: 0.0.0.0:11434}
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "3", memory: 6Gi}
+          readinessProbe:
+            httpGet: {path: /api/tags, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: {path: /api/tags, port: http}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - {name: models, mountPath: /root/.ollama}
+            - {name: tmp, mountPath: /tmp}
+            - {name: cache, mountPath: /root/.cache}
       volumes:
-      - name: models
-        persistentVolumeClaim: {claimName: ollama-models}
+        - name: models
+          persistentVolumeClaim: {claimName: ollama-models}
+        - name: tmp
+          emptyDir: {sizeLimit: 256Mi}
+        - name: cache
+          emptyDir: {sizeLimit: 256Mi}

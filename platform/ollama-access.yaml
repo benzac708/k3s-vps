@@ -1,16 +1,19 @@
-# ai-platform has a default-deny-ingress policy (all pods). Ollama is a
-# shared platform service, so it explicitly opens 11434 to cluster pods.
-# Single-tenant box: pod-wide allowance is proportionate; the default-deny
-# stays untouched for everything else.
+# The ai-platform namespace is default-deny for ingress. Only AskVault pods
+# need the shared embedding endpoint.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: ollama-allow-cluster
+  name: ollama-allow-askvault
   namespace: ai-platform
 spec:
   podSelector:
-    matchLabels: {app: ollama}
+    matchLabels:
+      app: ollama
   policyTypes: [Ingress]
   ingress:
-  - ports:
-    - port: 11434
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: askvault
+      ports:
+        - {protocol: TCP, port: 11434}

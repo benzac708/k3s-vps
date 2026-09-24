@@ -1,44 +1,85 @@
 # k3s-vps
 
-Single-node K3s on Oracle Cloud free tier (Ampere ARM: 4 OCPU / 24 GB RAM).
-The floor AskVault stands on. One `install.sh` from bare Ubuntu 22.04 to a
-TLS-terminated cluster; everything above the node lives in git.
+Reproducible single-node K3s platform for the AskVault AI service on an
+Oracle Cloud Ampere ARM VM (4 OCPU / 24 GB RAM).
 
-## Setup (fresh node only)
+This repository owns the **node and platform bootstrap**. Application and
+monitoring configuration lives in the separate
+[`askvault-gitops`](https://github.com/benzac708/askvault-gitops) repository.
+
+## Install
+
+The install script is for a fresh Ubuntu 22.04/24.04 node. It pins K3s to
+`v1.36.4+k3s1` and exposes only HTTP/HTTPS publicly. SSH and the Kubernetes API
+are restricted to the private admin CIDR (`100.64.0.0/10` by default).
 
 ```bash
-./install.sh
-export KUBECONFIG=~/.kube/config-k3s
-kubectl get nodes
+K3S_VERSION=v1.36.4+k3s1 ADMIN_CIDR=100.64.0.0/10 ./install.sh
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+sudo k3s kubectl get nodes -o wide
 ```
 
-OCI console: open 6443, 80, 443 in the security list. `ufw` alone is not enough.
+Do not open 6443 or 22 to `0.0.0.0/0` in the OCI Security List. If the node
+must be reachable outside Tailscale, replace the default CIDR with a specific
+administrator network.
 
-Then, once per cluster:
+## Bootstrap
+
+After the node is healthy:
 
 ```bash
-./platform/bootstrap.sh   # ingress-nginx + cert-manager + ArgoCD (pinned) + ollama
+./platform/bootstrap.sh
 ```
 
-## What's running
+The bootstrap boundary installs pinned ingress-nginx, cert-manager, Argo CD,
+the ApplicationSet CRD, Argo CD Image Updater, Ollama, the AI namespace quota,
+and the default-deny network policy. It is intentionally not GitOps-managed:
+the platform must exist before Argo CD can reconcile applications.
 
-- `askvault` namespace: AskVault RAG API (GitOps-synced, `askvault.zachara.dev`)
-- `ai-platform` namespace: Ollama (shared LLM/embeddings for the box)
-- `monitoring` namespace: Prometheus + Grafana (deploy via askvault-gitops)
-- `demo` namespace: nginx demo (first-deploy smoke test)
-- ingress-nginx + cert-manager (Let's Encrypt prod)
+The live monitoring stack and AskVault application are applied from
+`askvault-gitops`, not from this repository.
 
-Retired 2026-09-23: the old `ai-demo/ai-app` deployment and the hand-applied
-`ai-platform/llm-api` stack were deleted, absorbed into AskVault + Ollama above.
+## Architecture
 
-## Useful
+```text
+Oracle ARM VM
+  └─ K3s v1.36.4
+      ├─ ingress-nginx + cert-manager
+      ├─ Argo CD + Image Updater
+      ├─ ai-platform: Ollama + PVC
+      ├─ monitoring: Prometheus + Grafana (askvault-gitops)
+      └─ askvault: RAG API + ServiceMonitor (askvault-gitops)
+```
+
+## Operations
 
 ```bash
-kubectl get pods -A
-kubectl get ingress -A
-kubectl get certificate -A
-kubectl logs -l app=askvault -n askvault --tail=50
+sudo k3s kubectl get pods -A
+sudo k3s kubectl get ingress -A
+sudo k3s kubectl get certificate -A
+sudo k3s kubectl -n argocd get applications
+sudo k3s kubectl -n argocd get imageupdaters
+sudo k3s kubectl -n askvault get pods
+sudo k3s kubectl -n monitoring get pods
 journalctl -u k3s -f
 ```
 
-See `notes/break-fix.md` for what broke.
+## Security decisions
+
+- The Kubernetes API is private/admin-only; public ingress is 80/443 only.
+
+- Ollama's image is digest-pinned and its ingress is limited to AskVault pods.
+
+- AskVault runs as UID 10001 with a read-only root filesystem, no API token, a
+  NetworkPolicy and no public metrics path.
+
+- The `ai-platform` namespace has a default-deny ingress policy and a resource
+  quota.
+
+- Grafana credentials are supplied through a Kubernetes Secret, never Git.
+
+## Incidents
+
+`notes/break-fix.md` records real failures and their verified fixes, including
+RWO/PVC scheduling, namespace quota, missing ApplicationSet CRD, Helm readiness
+timeouts, and mutable image delivery.
