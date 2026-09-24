@@ -24,11 +24,4 @@ kubeconform \
   platform/ollama-access.yaml \
   tls/cluster-issuer.yaml
 
-TRIVY_CACHE_DIR="${TRIVY_CACHE_DIR:-$PWD/.trivy-cache}"
-export TRIVY_CACHE_DIR
-trivy fs \
-  --scanners vuln,misconfig,secret \
-  --severity HIGH,CRITICAL \
-  --ignore-unfixed \
-  --exit-code 1 \
-  .
+# Trivy runs as the dedicated CI step in the workflow.
