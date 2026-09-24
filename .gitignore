@@ -1,0 +1,4 @@
+.trivy-cache/
+*.tfstate
+*.tfstate.*
+.env
