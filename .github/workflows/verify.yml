@@ -1,28 +1,46 @@
 name: verify
+
 on:
   push:
     branches: [main]
   pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: k3s-vps-verify-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - name: Shell scripts pass shellcheck
-        run: shellcheck -S warning install.sh platform/bootstrap.sh
-      - name: Scripts are executable
-        run: test -x install.sh && test -x platform/bootstrap.sh
-      - name: YAML lint
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+        with:
+          version: "0.12.9"
+          enable-cache: true
+      - name: Install checksum-verified tools
         run: |
-          pip install -q yamllint
-          yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable, indentation: {spaces: 2, indent-sequences: false}}}' ingress/ tls/ platform/
-      - name: No placeholders left behind
-        run: "! grep -rnE "REPLACE_(ME|WITH)" ingress/ tls/ platform/ README.md install.sh 2>/dev/null"
-      - name: No secrets in tree
-        uses: gitleaks/gitleaks-action@v2
-      - name: Install kubeconform
-        run: |
-          curl -sL --max-time 120 -o kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz
-          tar xzf kubeconform.tar.gz kubeconform && sudo mv kubeconform /usr/local/bin/ && kubeconform -v
-      - name: Manifests conform to Kubernetes schemas
-        run: kubeconform -kubernetes-version 1.36.0 -strict -schema-locations 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' -schema-locations default platform/ollama.yaml platform/ollama-access.yaml ingress/demo-ingress.yaml tls/cluster-issuer.yaml
+          INSTALL_DIR="$HOME/.local/bin" scripts/install-tools.sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Validate platform scripts and manifests
+        run: scripts/verify.sh
+      - name: Trivy configuration and secret scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          version: v0.71.2
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          timeout: 10m
