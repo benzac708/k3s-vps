@@ -13,13 +13,13 @@ kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -n argocd -f "https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD}/manifests/install.yaml"
 # The full Argo CD install includes the ApplicationSet controller but not this
 # CRD in v3.5.3. Applying it prevents the controller restart loop.
-kubectl apply -f "https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD}/manifests/crds/applicationset-crd.yaml"
+kubectl apply --server-side --force-conflicts -f "https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD}/manifests/crds/applicationset-crd.yaml"
 kubectl apply -n argocd -f platform/argocd-image-updater-install.yaml
 
 kubectl -n ingress-nginx wait --for=condition=available deploy/ingress-nginx-controller --timeout=300s
 kubectl -n cert-manager wait --for=condition=available deploy/cert-manager --timeout=300s
 kubectl -n argocd wait --for=condition=available deploy/argocd-server --timeout=300s
-kubectl -n argocd wait --for=condition=available deploy/argocd-image-updater --timeout=300s
+kubectl -n argocd wait --for=condition=available deploy/argocd-image-updater-controller --timeout=300s
 
 kubectl apply -f tls/cluster-issuer.yaml
 kubectl apply -f platform/ai-platform.yaml
