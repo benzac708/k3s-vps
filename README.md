@@ -7,6 +7,13 @@ This repository owns the **node and platform bootstrap**. Application and
 monitoring configuration lives in the separate
 [`askvault-gitops`](https://github.com/benzac708/askvault-gitops) repository.
 
+> **Status.** This is the standalone platform blueprint (ingress-nginx +
+> Ollama AI platform) provisioned by `install.sh` + `platform/bootstrap.sh` on
+> a fresh node. The node currently serving AskVault in production is
+> bootstrapped by `askvault-gitops/hack` instead (Traefik + Caddy edge, Argo
+> CD) and does not run the components below; both the blueprint and the
+> deployed node are genuine, they are just not the same deployment.
+
 ## Install
 
 The install script is for a fresh Ubuntu 22.04/24.04 node. It pins K3s to
@@ -68,15 +75,17 @@ journalctl -u k3s -f
 
 - The Kubernetes API is private/admin-only; public ingress is 80/443 only.
 
-- Ollama's image is digest-pinned and its ingress is limited to AskVault pods.
+- Ollama's image is digest-pinned and its ingress is limited to AskVault pods
+  (as provisioned by `platform/bootstrap.sh`).
 
-- AskVault runs as UID 10001 with a read-only root filesystem, no API token, a
-  NetworkPolicy and no public metrics path.
+- AskVault runs as UID 10001 with a read-only root filesystem, no API token
+  and no public metrics path.
 
-- The `ai-platform` namespace has a default-deny ingress policy and a resource
-  quota.
+- The `ai-platform` namespace ships with a default-deny ingress policy and a
+  resource quota (as provisioned by `platform/bootstrap.sh`).
 
-- Grafana credentials are supplied through a Kubernetes Secret, never Git.
+- Grafana credentials are supplied through a Kubernetes Secret, never Git
+  (in the blueprint's monitoring manifests).
 
 ## Incidents
 
