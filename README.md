@@ -34,10 +34,12 @@ Everything else is elsewhere, deliberately:
   scripted rebuild (`hack/00…99`), the dev/prod overlays, and the Argo CD
   objects. Argo CD reconciles the `askvault-prod`/`askvault-dev` applications
   from that repository.
-- **Ingress is k3s-native Traefik,** deployed as a NodePort behind a host-level
-  Caddy on 80/443, with a cloudflared tunnel at the edge. Ingress-nginx is
-  deliberately not used: Traefik is the ingress controller k3s ships with, and
-  the whole edge chain is documented in `askvault-gitops/hack`.
+- **Ingress is k3s-native Traefik,** a NodePort (30080) reached DIRECTLY by a
+  cloudflared tunnel for AskVault; how it serves the app is documented in
+  `askvault-gitops/hack` (Traefik CRDs: IngressRoute + Middleware). A host-level
+  Caddy on 80/443 fronts the OTHER `*.zachara.dev` names, and is not part of the
+  AskVault path. Ingress-nginx is deliberately not used: Traefik is the ingress
+  controller k3s ships with.
 - **The model is hosted, not local.** Ollama was evaluated and rejected: a
   local model on this box is too slow and too weak for the RAG service. The
   service calls a pinned hosted model (OpenRouter) instead - see the
