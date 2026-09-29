@@ -30,7 +30,7 @@ administrator network.
 
 Everything else is elsewhere, deliberately:
 
-- **Cluster + application GitOps** — `askvault-gitops`, including the
+- **Cluster + application GitOps** - `askvault-gitops`, including the
   scripted rebuild (`hack/00…99`), the dev/prod overlays, and the Argo CD
   objects. Argo CD reconciles the `askvault-prod`/`askvault-dev` applications
   from that repository.
@@ -40,14 +40,14 @@ Everything else is elsewhere, deliberately:
   the whole edge chain is documented in `askvault-gitops/hack`.
 - **The model is hosted, not local.** Ollama was evaluated and rejected: a
   local model on this box is too slow and too weak for the RAG service. The
-  service calls a pinned hosted model (OpenRouter) instead — see the
+  service calls a pinned hosted model (OpenRouter) instead - see the
   `askvault` repo for the provider seam and the rate ceilings that protect its
   quota.
 - **cert-manager** is required by the monitoring stack's admission webhooks
   (the live `Certificate` objects are `kube-prometheus-stack-admission` and
   `kube-prometheus-stack-root-cert`); `askvault-gitops/hack/31-monitoring.sh`
   installs it. `tls/cluster-issuer.yaml` here is the Let's Encrypt convention
-  only — the public edge terminates TLS at cloudflared, so no public object
+  only - the public edge terminates TLS at cloudflared, so no public object
   consumes the issuer.
 
 ## Verification (CI)
