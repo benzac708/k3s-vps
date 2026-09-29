@@ -1,24 +1,20 @@
 # k3s-vps
 
-Reproducible single-node K3s platform for the AskVault AI service on an
-Oracle Cloud Ampere ARM VM (4 OCPU / 24 GB RAM).
+Node bootstrap for the AskVault single-node k3s platform on an Oracle Cloud
+Ampere ARM VM (4 OCPU / 24 GB RAM, free tier). Everything after the node is
+healthy lives in the application repo
+([`askvault`](https://github.com/benzac708/askvault), private) and the
+cluster-and-GitOps repo ([`askvault-gitops`](https://github.com/benzac708/askvault-gitops), private).
 
-This repository owns the **node and platform bootstrap**. Application and
-monitoring configuration lives in the separate
-[`askvault-gitops`](https://github.com/benzac708/askvault-gitops) repository.
-
-> **Status.** This is the standalone platform blueprint (ingress-nginx +
-> Ollama AI platform) provisioned by `install.sh` + `platform/bootstrap.sh` on
-> a fresh node. The node currently serving AskVault in production is
-> bootstrapped by `askvault-gitops/hack` instead (Traefik + Caddy edge, Argo
-> CD) and does not run the components below; both the blueprint and the
-> deployed node are genuine, they are just not the same deployment.
+This repository owns exactly one thing: **bringing a fresh node to the point
+where the GitOps flow can take over.**
 
 ## Install
 
-The install script is for a fresh Ubuntu 22.04/24.04 node. It pins K3s to
-`v1.36.4+k3s1` and exposes only HTTP/HTTPS publicly. SSH and the Kubernetes API
-are restricted to the private admin CIDR (`100.64.0.0/10` by default).
+`install.sh` is for a fresh Ubuntu 22.04/24.04 node. It pins K3s to
+`v1.36.4+k3s1` and exposes only HTTP/HTTPS publicly. SSH and the Kubernetes
+API are restricted to the private admin CIDR (Tailscale `100.64.0.0/10` by
+default).
 
 ```bash
 K3S_VERSION=v1.36.4+k3s1 ADMIN_CIDR=100.64.0.0/10 ./install.sh
@@ -30,65 +26,47 @@ Do not open 6443 or 22 to `0.0.0.0/0` in the OCI Security List. If the node
 must be reachable outside Tailscale, replace the default CIDR with a specific
 administrator network.
 
-## Bootstrap
+## After the node is healthy
 
-After the node is healthy:
+Everything else is elsewhere, deliberately:
+
+- **Cluster + application GitOps** — `askvault-gitops`, including the
+  scripted rebuild (`hack/00…99`), the dev/prod overlays, and the Argo CD
+  objects. Argo CD reconciles the `askvault-prod`/`askvault-dev` applications
+  from that repository.
+- **Ingress is k3s-native Traefik,** deployed as a NodePort behind a host-level
+  Caddy on 80/443, with a cloudflared tunnel at the edge. Ingress-nginx is
+  deliberately not used: Traefik is the ingress controller k3s ships with, and
+  the whole edge chain is documented in `askvault-gitops/hack`.
+- **The model is hosted, not local.** Ollama was evaluated and rejected: a
+  local model on this box is too slow and too weak for the RAG service. The
+  service calls a pinned hosted model (OpenRouter) instead — see the
+  `askvault` repo for the provider seam and the rate ceilings that protect its
+  quota.
+- **cert-manager** is required by the monitoring stack's admission webhooks
+  (the live `Certificate` objects are `kube-prometheus-stack-admission` and
+  `kube-prometheus-stack-root-cert`); `askvault-gitops/hack/31-monitoring.sh`
+  installs it. `tls/cluster-issuer.yaml` here is the Let's Encrypt convention
+  only — the public edge terminates TLS at cloudflared, so no public object
+  consumes the issuer.
+
+## Verification (CI)
+
+`.github/workflows/verify.yml` runs on push and pull request: actionlint,
+`bash -n` + shellcheck on the scripts, yamllint, gitleaks over history,
+kubeconform on the manifests, and a Trivy fs/misconfig/secret scan. Tools are
+checksum-pinned in `scripts/install-tools.sh`. This is the estate's public,
+green CI.
 
 ```bash
-./platform/bootstrap.sh
-```
-
-The bootstrap boundary installs pinned ingress-nginx, cert-manager, Argo CD,
-the ApplicationSet CRD, Argo CD Image Updater, Ollama, the AI namespace quota,
-and the default-deny network policy. It is intentionally not GitOps-managed:
-the platform must exist before Argo CD can reconcile applications.
-
-The live monitoring stack and AskVault application are applied from
-`askvault-gitops`, not from this repository.
-
-## Architecture
-
-```text
-Oracle ARM VM
-  └─ K3s v1.36.4
-      ├─ ingress-nginx + cert-manager
-      ├─ Argo CD + Image Updater
-      ├─ ai-platform: Ollama + PVC
-      ├─ monitoring: Prometheus + Grafana (askvault-gitops)
-      └─ askvault: RAG API + ServiceMonitor (askvault-gitops)
+scripts/verify.sh
 ```
 
 ## Operations
 
 ```bash
-sudo k3s kubectl get pods -A
-sudo k3s kubectl get ingress -A
-sudo k3s kubectl get certificate -A
-sudo k3s kubectl -n argocd get applications
-sudo k3s kubectl -n argocd get imageupdaters
-sudo k3s kubectl -n askvault get pods
-sudo k3s kubectl -n monitoring get pods
+sudo k3s kubectl get nodes -o wide
 journalctl -u k3s -f
 ```
 
-## Security decisions
-
-- The Kubernetes API is private/admin-only; public ingress is 80/443 only.
-
-- Ollama's image is digest-pinned and its ingress is limited to AskVault pods
-  (as provisioned by `platform/bootstrap.sh`).
-
-- AskVault runs as UID 10001 with a read-only root filesystem, no API token
-  and no public metrics path.
-
-- The `ai-platform` namespace ships with a default-deny ingress policy and a
-  resource quota (as provisioned by `platform/bootstrap.sh`).
-
-- Grafana credentials are supplied through a Kubernetes Secret, never Git
-  (in the blueprint's monitoring manifests).
-
-## Incidents
-
-`notes/break-fix.md` records real failures and their verified fixes, including
-RWO/PVC scheduling, namespace quota, missing ApplicationSet CRD, Helm readiness
-timeouts, and mutable image delivery.
+See `notes/break-fix.md` for what broke.
